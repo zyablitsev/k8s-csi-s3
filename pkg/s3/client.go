@@ -31,11 +31,11 @@ type Config struct {
 }
 
 type FSMeta struct {
-	BucketName    string `json:"Name"`
-	Prefix        string `json:"Prefix"`
-	Mounter       string `json:"Mounter"`
+	BucketName    string   `json:"Name"`
+	Prefix        string   `json:"Prefix"`
+	Mounter       string   `json:"Mounter"`
 	MountOptions  []string `json:"MountOptions"`
-	CapacityBytes int64  `json:"CapacityBytes"`
+	CapacityBytes int64    `json:"CapacityBytes"`
 }
 
 func NewClient(cfg *Config) (*s3Client, error) {
@@ -51,9 +51,17 @@ func NewClient(cfg *Config) (*s3Client, error) {
 	if u.Port() != "" {
 		endpoint = u.Hostname() + ":" + u.Port()
 	}
+	tr, err := minio.DefaultTransport(ssl)
+	if err != nil {
+		return nil, err
+	}
+	if ssl {
+		tr.TLSClientConfig.InsecureSkipVerify = true
+	}
 	minioClient, err := minio.New(endpoint, &minio.Options{
-		Creds:  credentials.NewStaticV4(client.Config.AccessKeyID, client.Config.SecretAccessKey, ""),
-		Secure: ssl,
+		Creds:     credentials.NewStaticV4(client.Config.AccessKeyID, client.Config.SecretAccessKey, ""),
+		Secure:    ssl,
+		Transport: tr,
 	})
 	if err != nil {
 		return nil, err
@@ -204,14 +212,14 @@ func (client *s3Client) removeObjectsOneByOne(bucketName, prefix string) error {
 				glog.Errorf("Failed to remove object %s, error: %s", object.Key, err)
 				removeErrors++
 			}
-			<- guardCh
+			<-guardCh
 		}()
 	}
 	for i := 0; i < parallelism; i++ {
 		guardCh <- 1
 	}
 	for i := 0; i < parallelism; i++ {
-		<- guardCh
+		<-guardCh
 	}
 
 	if removeErrors > 0 {
